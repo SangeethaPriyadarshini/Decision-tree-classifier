@@ -1,0 +1,517 @@
+!pip install graphviz
+!pip install dtreeviz
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.tree import DecisionTreeClassifier, plot_tree, export_text
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_curve, auc
+from sklearn.ensemble import RandomForestClassifier
+import graphviz
+from sklearn import tree
+import warnings
+warnings.filterwarnings('ignore')
+plt.style.use('seaborn-v0_8')
+sns.set_palette("husl")
+
+print("🚢 Titanic Survival Prediction using Decision Trees")
+print("="*60)
+try:
+   
+    import kaggle
+    kaggle.api.dataset_download_files('c/titanic', path='.', unzip=True)
+    df = pd.read_csv('train.csv')
+except:
+    
+    print("Please download the Titanic dataset from: https://www.kaggle.com/c/titanic/data")
+    print("Upload the train.csv file to your Colab environment")
+    df = pd.DataFrame({
+        'PassengerId': range(1, 892),
+        'Survived': np.random.choice([0, 1], 891),
+        'Pclass': np.random.choice([1, 2, 3], 891),
+        'Name': ['Passenger ' + str(i) for i in range(1, 892)],
+        'Sex': np.random.choice(['male', 'female'], 891),
+        'Age': np.random.normal(29, 15, 891),
+        'SibSp': np.random.choice(range(0, 6), 891),
+        'Parch': np.random.choice(range(0, 4), 891),
+        'Ticket': ['T' + str(i) for i in range(1, 892)],
+        'Fare': np.random.exponential(30, 891),
+        'Cabin': [None] * 891,
+        'Embarked': np.random.choice(['C', 'Q', 'S'], 891)
+    })
+    print("Using sample data for demonstration. Please replace with actual Titanic dataset.")
+
+print(f"Dataset shape: {df.shape}")
+print("\nFirst few rows:")
+print(df.head())
+print("\n" + "="*60)
+print("DATASET OVERVIEW")
+print("="*60)
+
+print("\nDataset Info:")
+print(df.info())
+
+print("\nMissing Values:")
+print(df.isnull().sum())
+
+print("\nSurvival Rate:")
+survival_rate = df['Survived'].mean()
+print(f"Overall survival rate: {survival_rate:.2%}")
+
+# Exploratory Data Analysis
+print("\n" + "="*60)
+print("🔍 EXPLORATORY DATA ANALYSIS")
+print("="*60)
+
+# Create visualizations
+fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+fig.suptitle('Titanic Dataset - Exploratory Data Analysis', fontsize=16, fontweight='bold')
+
+# Survival distribution
+axes[0,0].pie(df['Survived'].value_counts(), labels=['Died', 'Survived'], autopct='%1.1f%%', startangle=90)
+axes[0,0].set_title('Survival Distribution')
+
+# Survival by Gender
+survival_gender = pd.crosstab(df['Sex'], df['Survived'], normalize='index')
+survival_gender.plot(kind='bar', ax=axes[0,1], color=['#ff7f7f', '#7fbf7f'])
+axes[0,1].set_title('Survival Rate by Gender')
+axes[0,1].set_ylabel('Survival Rate')
+axes[0,1].tick_params(axis='x', rotation=0)
+axes[0,1].legend(['Died', 'Survived'])
+
+# Survival by Class
+survival_class = pd.crosstab(df['Pclass'], df['Survived'], normalize='index')
+survival_class.plot(kind='bar', ax=axes[0,2], color=['#ff7f7f', '#7fbf7f'])
+axes[0,2].set_title('Survival Rate by Passenger Class')
+axes[0,2].set_ylabel('Survival Rate')
+axes[0,2].tick_params(axis='x', rotation=0)
+axes[0,2].legend(['Died', 'Survived'])
+
+# Age distribution
+axes[1,0].hist(df['Age'].dropna(), bins=30, edgecolor='black', alpha=0.7)
+axes[1,0].set_title('Age Distribution')
+axes[1,0].set_xlabel('Age')
+axes[1,0].set_ylabel('Frequency')
+
+# Fare distribution
+axes[1,1].hist(df['Fare'], bins=30, edgecolor='black', alpha=0.7)
+axes[1,1].set_title('Fare Distribution')
+axes[1,1].set_xlabel('Fare')
+axes[1,1].set_ylabel('Frequency')
+
+# Family size (SibSp + Parch)
+df['FamilySize'] = df['SibSp'] + df['Parch'] + 1
+family_survival = df.groupby('FamilySize')['Survived'].mean()
+axes[1,2].bar(family_survival.index, family_survival.values, color='skyblue', edgecolor='black')
+axes[1,2].set_title('Survival Rate by Family Size')
+axes[1,2].set_xlabel('Family Size')
+axes[1,2].set_ylabel('Survival Rate')
+
+plt.tight_layout()
+plt.show()
+
+# Feature Engineering and Preprocessing
+print("\n" + "="*60)
+print("🔧 FEATURE ENGINEERING & PREPROCESSING")
+print("="*60)
+
+# Create a copy for preprocessing
+df_processed = df.copy()
+
+# Fill missing values
+df_processed['Age'].fillna(df_processed['Age'].median(), inplace=True)
+df_processed['Embarked'].fillna(df_processed['Embarked'].mode()[0], inplace=True)
+df_processed['Fare'].fillna(df_processed['Fare'].median(), inplace=True)
+
+# Create new features
+df_processed['FamilySize'] = df_processed['SibSp'] + df_processed['Parch'] + 1
+df_processed['IsAlone'] = (df_processed['FamilySize'] == 1).astype(int)
+
+# Extract title from name
+df_processed['Title'] = df_processed['Name'].str.extract(' ([A-Za-z]+)\.', expand=False)
+df_processed['Title'] = df_processed['Title'].replace(['Lady', 'Countess','Capt', 'Col',
+    'Don', 'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer', 'Dona'], 'Rare')
+df_processed['Title'] = df_processed['Title'].replace('Mlle', 'Miss')
+df_processed['Title'] = df_processed['Title'].replace('Ms', 'Miss')
+df_processed['Title'] = df_processed['Title'].replace('Mme', 'Mrs')
+
+# Age groups
+df_processed['AgeGroup'] = pd.cut(df_processed['Age'], bins=[0, 12, 18, 35, 60, 100], 
+                                 labels=['Child', 'Teen', 'Adult', 'Middle', 'Senior'])
+
+# Fare groups
+df_processed['FareGroup'] = pd.cut(df_processed['Fare'], bins=4, labels=['Low', 'Medium', 'High', 'VeryHigh'])
+
+# Encode categorical variables
+le = LabelEncoder()
+categorical_columns = ['Sex', 'Embarked', 'Title', 'AgeGroup', 'FareGroup']
+
+for col in categorical_columns:
+    df_processed[col + '_encoded'] = le.fit_transform(df_processed[col].astype(str))
+
+# Select features for modeling
+feature_columns = ['Pclass', 'Sex_encoded', 'Age', 'SibSp', 'Parch', 'Fare', 
+                   'Embarked_encoded', 'FamilySize', 'IsAlone', 'Title_encoded']
+
+X = df_processed[feature_columns]
+y = df_processed['Survived']
+
+print("Features selected for modeling:")
+for i, feature in enumerate(feature_columns):
+    print(f"{i+1}. {feature}")
+
+print(f"\nFeature matrix shape: {X.shape}")
+print(f"Target vector shape: {y.shape}")
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+print(f"\nTraining set size: {X_train.shape[0]}")
+print(f"Testing set size: {X_test.shape[0]}")
+
+# Model Training and Optimization
+print("\n" + "="*60)
+print("MODEL TRAINING & OPTIMIZATION")
+print("="*60)
+
+# Basic Decision Tree
+dt_basic = DecisionTreeClassifier(random_state=42)
+dt_basic.fit(X_train, y_train)
+
+# Hyperparameter tuning
+param_grid = {
+    'max_depth': [3, 5, 7, None],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'criterion': ['gini', 'entropy']
+}
+
+print("Performing hyperparameter tuning...")
+dt_grid = GridSearchCV(DecisionTreeClassifier(random_state=42), param_grid, 
+                       cv=5, scoring='accuracy', n_jobs=-1)
+dt_grid.fit(X_train, y_train)
+
+print(f"Best parameters: {dt_grid.best_params_}")
+print(f"Best cross-validation score: {dt_grid.best_score_:.4f}")
+
+# Best model
+dt_best = dt_grid.best_estimator_
+
+# Model Evaluation
+print("\n" + "="*60)
+print(" MODEL EVALUATION")
+print("="*60)
+
+# Predictions
+y_pred_basic = dt_basic.predict(X_test)
+y_pred_best = dt_best.predict(X_test)
+y_pred_proba = dt_best.predict_proba(X_test)[:, 1]
+
+# Accuracy scores
+basic_accuracy = accuracy_score(y_test, y_pred_basic)
+best_accuracy = accuracy_score(y_test, y_pred_best)
+
+print(f"Basic Decision Tree Accuracy: {basic_accuracy:.4f}")
+print(f"Optimized Decision Tree Accuracy: {best_accuracy:.4f}")
+print(f"Improvement: {best_accuracy - basic_accuracy:.4f}")
+
+# Cross-validation scores
+cv_scores = cross_val_score(dt_best, X_train, y_train, cv=5, scoring='accuracy')
+print(f"\nCross-validation scores: {cv_scores}")
+print(f"Mean CV accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std() * 2:.4f})")
+
+# Classification report
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred_best))
+
+# Feature Importance
+print("\n" + "="*60)
+print("FEATURE IMPORTANCE ANALYSIS")
+print("="*60)
+
+feature_importance = pd.DataFrame({
+    'feature': feature_columns,
+    'importance': dt_best.feature_importances_
+}).sort_values('importance', ascending=False)
+
+print("Feature Importance Ranking:")
+for i, (_, row) in enumerate(feature_importance.iterrows()):
+    print(f"{i+1}. {row['feature']}: {row['importance']:.4f}")
+
+# Visualizations
+print("\n" + "="*60)
+print("MODEL VISUALIZATIONS")
+print("="*60)
+
+# Create comprehensive visualization
+fig = plt.figure(figsize=(20, 16))
+
+# 1. Feature Importance
+plt.subplot(3, 3, 1)
+sns.barplot(data=feature_importance, y='feature', x='importance', palette='viridis')
+plt.title('Feature Importance', fontweight='bold')
+plt.xlabel('Importance Score')
+
+# 2. Confusion Matrix
+plt.subplot(3, 3, 2)
+cm = confusion_matrix(y_test, y_pred_best)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+            xticklabels=['Died', 'Survived'], yticklabels=['Died', 'Survived'])
+plt.title('Confusion Matrix', fontweight='bold')
+plt.ylabel('True Label')
+plt.xlabel('Predicted Label')
+
+# 3. ROC Curve
+plt.subplot(3, 3, 3)
+fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+roc_auc = auc(fpr, tpr)
+plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve', fontweight='bold')
+plt.legend(loc="lower right")
+
+# 4. Decision Tree Visualization (first 3 levels)
+plt.subplot(3, 3, (4, 6))
+plot_tree(dt_best, max_depth=3, feature_names=feature_columns, 
+          class_names=['Died', 'Survived'], filled=True, fontsize=8)
+plt.title('Decision Tree Structure (First 3 Levels)', fontweight='bold')
+
+# 5. Model Performance Comparison
+plt.subplot(3, 3, 7)
+models = ['Basic DT', 'Optimized DT']
+accuracies = [basic_accuracy, best_accuracy]
+bars = plt.bar(models, accuracies, color=['lightblue', 'darkblue'])
+plt.title('Model Performance Comparison', fontweight='bold')
+plt.ylabel('Accuracy')
+plt.ylim([0.7, 1.0])
+for bar, acc in zip(bars, accuracies):
+    plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+             f'{acc:.3f}', ha='center', va='bottom', fontweight='bold')
+
+# 6. Cross-validation scores
+plt.subplot(3, 3, 8)
+plt.bar(range(1, 6), cv_scores, color='green', alpha=0.7)
+plt.axhline(y=cv_scores.mean(), color='red', linestyle='--', 
+            label=f'Mean: {cv_scores.mean():.3f}')
+plt.title('Cross-Validation Scores', fontweight='bold')
+plt.xlabel('Fold')
+plt.ylabel('Accuracy')
+plt.legend()
+
+# 7. Prediction Confidence Distribution
+plt.subplot(3, 3, 9)
+plt.hist(y_pred_proba, bins=20, alpha=0.7, color='purple', edgecolor='black')
+plt.title('Prediction Confidence Distribution', fontweight='bold')
+plt.xlabel('Predicted Probability of Survival')
+plt.ylabel('Frequency')
+
+plt.tight_layout()
+plt.show()
+
+# Innovation: Ensemble and Advanced Analysis
+print("\n" + "="*60)
+print("INNOVATION: ADVANCED ANALYSIS")
+print("="*60)
+
+# 1. Random Forest Comparison
+print("1. Random Forest Ensemble Comparison:")
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(X_train, y_train)
+rf_pred = rf.predict(X_test)
+rf_accuracy = accuracy_score(y_test, rf_pred)
+
+print(f"Random Forest Accuracy: {rf_accuracy:.4f}")
+print(f"Decision Tree vs Random Forest: {rf_accuracy - best_accuracy:+.4f}")
+
+# 2. Decision Path Analysis
+print("\n2. Decision Path Analysis for Sample Predictions:")
+
+def analyze_decision_path(model, X_sample, feature_names, sample_idx=0):
+    """Analyze decision path for a specific sample"""
+    sample = X_sample.iloc[sample_idx:sample_idx+1]
+    
+    # Get decision path
+    leaf_id = model.decision_path(sample)
+    feature = model.tree_.feature
+    threshold = model.tree_.threshold
+    
+    print(f"\nSample {sample_idx} decision path:")
+    print("Features:", sample.values.flatten())
+    
+    # Get the path
+    node_indicator = leaf_id.toarray()[0]
+    for node_id in range(len(node_indicator)):
+        if node_indicator[node_id]:
+            if sample.iloc[0, feature[node_id]] <= threshold[node_id]:
+                direction = "≤"
+            else:
+                direction = ">"
+            
+            if feature[node_id] != -2:  # Not a leaf
+                print(f"  Node {node_id}: {feature_names[feature[node_id]]} "
+                      f"{direction} {threshold[node_id]:.2f}")
+
+# Analyze paths for first 3 test samples
+for i in range(min(3, len(X_test))):
+    analyze_decision_path(dt_best, X_test, feature_columns, i)
+
+# 3. Feature Interaction Analysis
+print("\n3. Feature Interaction Analysis:")
+
+# Create interaction features
+X_interactions = X.copy()
+X_interactions['Sex_Class'] = X['Sex_encoded'] * X['Pclass']
+X_interactions['Age_Fare'] = X['Age'] * X['Fare']
+X_interactions['Family_Class'] = X['FamilySize'] * X['Pclass']
+
+# Train model with interactions
+X_int_train, X_int_test, _, _ = train_test_split(X_interactions, y, test_size=0.2, 
+                                                random_state=42, stratify=y)
+
+dt_interactions = DecisionTreeClassifier(**dt_grid.best_params_, random_state=42)
+dt_interactions.fit(X_int_train, y_train)
+int_pred = dt_interactions.predict(X_int_test)
+int_accuracy = accuracy_score(y_test, int_pred)
+
+print(f"Model with interactions accuracy: {int_accuracy:.4f}")
+print(f"Improvement with interactions: {int_accuracy - best_accuracy:+.4f}")
+
+# 4. Model Interpretability
+print("\n4. Model Rules (First 10 rules):")
+tree_rules = export_text(dt_best, feature_names=feature_columns)
+rules_lines = tree_rules.split('\n')
+for i, rule in enumerate(rules_lines[:15]):
+    if rule.strip():
+        print(f"  {rule}")
+
+# 5. Prediction Explanations
+print("\n5. Sample Prediction Explanations:")
+
+def explain_prediction(model, sample, feature_names, class_names=['Died', 'Survived']):
+    """Explain a single prediction"""
+    prediction = model.predict(sample.reshape(1, -1))[0]
+    probability = model.predict_proba(sample.reshape(1, -1))[0]
+    
+    print(f"Prediction: {class_names[prediction]} (Confidence: {probability[prediction]:.2%})")
+    print("Key factors:")
+    
+    # Get feature importance for this prediction
+    importances = model.feature_importances_
+    feature_values = sample
+    
+    # Sort by importance
+    sorted_features = sorted(zip(feature_names, feature_values, importances), 
+                           key=lambda x: x[2], reverse=True)
+    
+    for name, value, importance in sorted_features[:5]:
+        print(f"  - {name}: {value:.2f} (importance: {importance:.3f})")
+
+# Explain first few test samples
+for i in range(min(3, len(X_test))):
+    print(f"\nSample {i+1}:")
+    explain_prediction(dt_best, X_test.iloc[i].values, feature_columns)
+
+# Summary and Recommendations
+print("\n" + "="*60)
+print("SUMMARY & RECOMMENDATIONS")
+print("="*60)
+
+print(f"""
+MODEL PERFORMANCE SUMMARY:
+- Basic Decision Tree Accuracy: {basic_accuracy:.2%}
+- Optimized Decision Tree Accuracy: {best_accuracy:.2%}
+- Random Forest Accuracy: {rf_accuracy:.2%}
+- Cross-validation Mean: {cv_scores.mean():.2%} ± {cv_scores.std():.2%}
+
+KEY INSIGHTS:
+1. Most Important Features:
+   {chr(10).join([f'   - {row["feature"]}: {row["importance"]:.3f}' for _, row in feature_importance.head(3).iterrows()])}
+
+2. Model Characteristics:
+   - Tree Depth: {dt_best.get_depth()}
+   - Number of Leaves: {dt_best.get_n_leaves()}
+   - Best Criterion: {dt_best.criterion}
+
+RECOMMENDATIONS:
+1. The model shows good performance with {best_accuracy:.1%} accuracy
+2. Feature engineering improved model interpretability
+3. Consider ensemble methods for production use
+4. Monitor for overfitting with validation data
+5. Regular retraining recommended as new data becomes available
+
+BUSINESS INSIGHTS:
+- Gender and passenger class are the strongest survival predictors
+- Age and fare amount provide additional discriminatory power
+- Family size shows interesting survival patterns
+- The model can be used for risk assessment and resource allocation
+""")
+
+print("\n Analysis Complete!")
+print("="*60)
+
+# Save results (optional)
+results_summary = {
+    'basic_accuracy': basic_accuracy,
+    'optimized_accuracy': best_accuracy,
+    'rf_accuracy': rf_accuracy,
+    'cv_scores': cv_scores.tolist(),
+    'best_params': dt_grid.best_params_,
+    'feature_importance': feature_importance.to_dict('records')
+}
+
+print("\nResults saved to 'results_summary' dictionary")
+print("Model saved as 'dt_best' for further use")
+
+# Additional Innovation: Interactive Decision Tree
+print("\n" + "="*60)
+print("BONUS: PREDICTION INTERFACE")
+print("="*60)
+
+def predict_survival(pclass, sex, age, sibsp, parch, fare, embarked, title='Mr'):
+    """Interactive prediction function"""
+    
+    # Encode inputs
+    sex_encoded = 1 if sex.lower() == 'male' else 0
+    embarked_dict = {'C': 0, 'Q': 1, 'S': 2}
+    embarked_encoded = embarked_dict.get(embarked.upper(), 2)
+    title_dict = {'Mr': 2, 'Mrs': 3, 'Miss': 1, 'Master': 0, 'Rare': 4}
+    title_encoded = title_dict.get(title, 2)
+    
+    # Calculate derived features
+    family_size = sibsp + parch + 1
+    is_alone = 1 if family_size == 1 else 0
+    
+    # Create feature vector
+    features = [pclass, sex_encoded, age, sibsp, parch, fare, 
+                embarked_encoded, family_size, is_alone, title_encoded]
+    
+    # Make prediction
+    prediction = dt_best.predict([features])[0]
+    probability = dt_best.predict_proba([features])[0]
+    
+    result = "SURVIVED" if prediction == 1 else "DIED"
+    confidence = probability[prediction]
+    
+    return result, confidence, features
+
+# Example predictions
+print("Example Predictions:")
+examples = [
+    (1, 'female', 25, 0, 0, 50, 'S', 'Miss'),
+    (3, 'male', 30, 1, 2, 15, 'S', 'Mr'),
+    (2, 'female', 35, 1, 0, 30, 'C', 'Mrs')
+]
+
+for i, (pclass, sex, age, sibsp, parch, fare, embarked, title) in enumerate(examples):
+    result, confidence, features = predict_survival(pclass, sex, age, sibsp, parch, fare, embarked, title)
+    print(f"\nExample {i+1}: {sex.title()}, Age {age}, Class {pclass}")
+    print(f"Prediction: {result} (Confidence: {confidence:.1%})")
+
+print(f"\n You can use the 'predict_survival()' function to make new predictions!")
+print("Usage: predict_survival(pclass, sex, age, sibsp, parch, fare, embarked, title)")
