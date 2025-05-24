@@ -1,11 +1,20 @@
 # Decision-tree-classifier
+
 Titanic Survival prediction
+
 COMPANY: CODTECH IT SOLUTIONS
+
 NAME: SANGEETHA PRIYADARSHINI M
-INTERN ID:
+
+INTERN ID:CT04DM831
+
 DOMAIN: MACHINE LEARNING
+
 DURATION: 4 weeks
+
 MENTOR: NEELA SANTHOSH
+
+
 PROJECT DESCRIPTION:
        This project presents a sophisticated machine learning analysis using decision tree algorithms to predict passenger survival aboard the RMS Titanic. Leveraging the renowned Titanic dataset from Kaggle, this comprehensive study demonstrates end-to-end data science methodology, from exploratory data analysis to advanced model interpretation and business intelligence extraction.
        The primary objective centers on developing an interpretable classification model that can accurately predict passenger survival based on demographic, socioeconomic, and family structure variables. Unlike black-box algorithms, decision trees provide transparent, rule-based predictions that stakeholders can easily understand and validate, making this approach particularly valuable for historical analysis and risk assessment applications.
@@ -31,6 +40,16 @@ The optimized decision tree achieves approximately 82-85% accuracy on test data,
 OUTPUT:
 
 ![Image](https://github.com/user-attachments/assets/053bf468-0779-4025-af0f-bebcb3b58216)
+
+![Image](https://github.com/user-attachments/assets/f25bd7a9-dcda-47f8-9eab-837b12d9e20f)
+
+![Image](https://github.com/user-attachments/assets/0dadb60c-0ea2-4e09-9836-d709d63b45cf)
+
+![Image](https://github.com/user-attachments/assets/cc16ca19-3e49-4fed-94ff-606f5c607f61)
+
+![Image](https://github.com/user-attachments/assets/eb0b3865-3eaf-462d-adf0-3731d6504945)
+
+![Image](https://github.com/user-attachments/assets/afc9286d-5732-4ee9-9f96-d4e7d45a0df2)
 
 
 
