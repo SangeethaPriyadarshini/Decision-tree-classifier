@@ -25,10 +25,13 @@ Business Applications and Practical Impact
 The project's applications extend far beyond historical analysis. In maritime safety, similar models can inform evacuation protocols and resource allocation strategies. Insurance companies can leverage comparable methodologies for risk assessment and premium calculation. Emergency response planning benefits from understanding demographic survival patterns during disasters.
 The interpretable nature of decision trees makes them particularly valuable for regulatory compliance and ethical AI implementations, where model decisions must be explainable and auditable. Healthcare applications include patient risk stratification, while financial services utilize similar approaches for credit scoring and fraud detection.
 
+RESULTS AND PERFORMANCE METRICS:
+The optimized decision tree achieves approximately 82-85% accuracy on test data, with cross-validation confirming model stability. Feature importance analysis reveals that passenger gender and class represent the strongest survival predictors, followed by age and fare amount. The model demonstrates excellent interpretability while maintaining competitive performance against more complex ensemble methods.
+
 OUTPUT:
 
 ![Image](https://github.com/user-attachments/assets/053bf468-0779-4025-af0f-bebcb3b58216)
-RESULTS AND PERFORMANCE METRICS:
-The optimized decision tree achieves approximately 82-85% accuracy on test data, with cross-validation confirming model stability. Feature importance analysis reveals that passenger gender and class represent the strongest survival predictors, followed by age and fare amount. The model demonstrates excellent interpretability while maintaining competitive performance against more complex ensemble methods.
+
+
 
 
